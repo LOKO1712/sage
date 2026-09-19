@@ -17,7 +17,7 @@ Plataforma de seguridad inteligente para el hogar, basada en **ESP32**, con moni
 
 ## 📖 Descripción
 
-SAGE nace como proyecto de Introducción a la Ingeniería (UIS), evolucionando hacia una plataforma de seguridad doméstica completa e IoT. Integra:
+SAGE nace como proyecto personal luego de avances con TelegramBotMaster para ESP32, evolucionando hacia una plataforma de seguridad doméstica completa e IoT. Integra:
 
 - **Microcontrolador ESP32** — cerebro del sistema físico (sensores, actuadores)
 - **Protocolo MQTT** — comunicación en tiempo real entre todos los componentes
