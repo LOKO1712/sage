@@ -1,0 +1,65 @@
+# Arquitectura del sistema
+
+## Diagrama general
+
+```mermaid
+graph TD
+    subgraph Fisico["Capa física (ESP32)"]
+        S1[Sensor de gas]
+        S2[Sensor PIR]
+        S3[Sensores magnéticos de puerta]
+        A1[3 tomas de corriente]
+        A2[Lámpara on/off]
+        A3[Ventilador/extractor]
+        A4[Contactor eléctrico]
+        A5[Electroválvula de gas]
+        ESP[ESP32]
+        S1 & S2 & S3 --> ESP
+        ESP --> A1 & A2 & A3 & A4 & A5
+    end
+
+    subgraph Broker["Comunicación"]
+        MQTT[broker.hivemq.com<br/>tópicos bajo 'security/']
+    end
+
+    subgraph Sismico["Módulo sísmico (fuentes redundantes)"]
+        SD[Sismo Detector<br/>com.finazzi.distquake]
+        GG[Android Earthquake Alerts<br/>Google]
+        GS[GeoShake<br/>API MQTT/SSE]
+        NLS[NotificationListenerService]
+        SD --> NLS
+        GG --> NLS
+        NLS --> MQTT
+        GS -.MQTT directo opcional.-> MQTT
+    end
+
+    subgraph App["App Android"]
+        WV[WebView<br/>interfaz local en assets/]
+        NLS
+        WV <--> MQTT
+    end
+
+    ESP <--> MQTT
+```
+
+## Componentes
+
+### 1. ESP32 (capa física)
+Controla los sensores y actuadores del sistema. Se comunica exclusivamente vía MQTT.
+*(Ver nota de seguridad en el README raíz — detalles de pines y lógica de armado no publicados.)*
+
+### 2. Broker MQTT
+Se usa el broker público `broker.hivemq.com` como punto de encuentro entre todos los componentes, bajo el prefijo de tópicos `security/` (ej. `security/alerts`, `security/sensors/seismic`, `security/state`).
+
+> Nota de diseño: usar un broker público simplifica el desarrollo, pero para producción se recomienda migrar a un broker privado con autenticación.
+
+### 3. App Android
+Cumple dos roles en un solo APK:
+- **Interfaz visual**: un `WebView` que carga la interfaz web empaquetada localmente (no depende de internet para renderizar la UI, solo para la conexión MQTT en sí).
+- **Puente de alertas sísmicas**: un `NotificationListenerService` en segundo plano que intercepta notificaciones de apps de terceros relacionadas con sismos, las interpreta, y las republica en el tópico `security/alerts`.
+
+### 4. Módulo sísmico
+Ver [`INVESTIGACION.md`](INVESTIGACION.md) para el porqué de este diseño. En resumen: no existe una fuente pública de datos sísmicos crudos en tiempo real para Colombia, así que el sistema aprovecha la inteligencia crowdsourced que ya corre en apps de terceros bien establecidas, interceptando sus notificaciones como si fueran "sensores" adicionales.
+
+### 5. Interfaz web
+HTML/CSS/JS puro (sin framework), conectado directamente al broker MQTT vía WebSocket (`mqtt.js`). Se desarrolla y prueba de forma independiente (hosteada en Netlify) y luego se empaqueta dentro de la app Android.

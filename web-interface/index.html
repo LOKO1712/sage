@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sistema de Seguridad IoT</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- CANVAS BACKGROUND -->
+  <canvas id="bgCanvas"></canvas>
+  <div class="bg-gradient"></div>
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L3 7v6c0 5.25 3.75 10.13 9 11.25C17.25 23.13 21 18.25 21 13V7l-9-5z"/>
+          <path d="M9 12l2 2 4-4"/>
+        </svg>
+        <div class="logo-glow"></div>
+      </div>
+      <div class="header-text">
+        <h1>Mi Hogar</h1>
+        <span class="connection-status" id="connectionStatus">
+          <span class="status-dot offline"></span>
+          Desconectado
+        </span>
+      </div>
+    </div>
+    <button class="settings-btn" onclick="showScreen('settings')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- SCREENS -->
+  <main class="app-content">
+
+    <!-- ==================== DASHBOARD ==================== -->
+    <section class="screen active" id="screen-dashboard">
+      <!-- Estado del Sistema -->
+      <div class="system-status-card" id="systemStatusCard">
+        <div class="card-bg-pattern"></div>
+        <div class="shield-icon" id="shieldIcon">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2L3 7v6c0 5.25 3.75 10.13 9 11.25C17.25 23.13 21 18.25 21 13V7l-9-5z"/>
+            <path d="M9 12l2 2 4-4" id="shieldCheck"/>
+          </svg>
+          <div class="shield-ring"></div>
+          <div class="shield-ring ring-2"></div>
+        </div>
+        <h2 id="systemTitle">SISTEMA ARMADO</h2>
+        <p id="systemSubtitle">Todo en orden</p>
+      </div>
+
+      <!-- Sensores Grid -->
+      <div class="sensors-grid">
+        <div class="sensor-card" id="sensor-movement" onclick="showScreen('sensors')">
+          <div class="sensor-glow blue"></div>
+          <div class="sensor-icon movement">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="5" r="3"/>
+              <path d="M12 8v4l-3 4M12 12l3 4M8 20h8"/>
+            </svg>
+          </div>
+          <div class="sensor-info">
+            <span class="sensor-label">Movimiento</span>
+            <span class="sensor-value" id="sensorPir">No detectado</span>
+          </div>
+          <svg class="sensor-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+
+        <div class="sensor-card" id="sensor-door" onclick="showScreen('sensors')">
+          <div class="sensor-glow orange"></div>
+          <div class="sensor-icon door">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12h18M5 12V5a2 2 0 012-2h10a2 2 0 012 2v7M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/>
+              <circle cx="17" cy="12" r="1"/>
+            </svg>
+          </div>
+          <div class="sensor-info">
+            <span class="sensor-label">Puerta Principal</span>
+            <span class="sensor-value" id="sensorDoor">Cerrada</span>
+          </div>
+          <svg class="sensor-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+
+        <div class="sensor-card" id="sensor-gas" onclick="showScreen('sensors')">
+          <div class="sensor-glow red"></div>
+          <div class="sensor-icon gas">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C8 2 4 6 4 10c0 6 8 12 8 12s8-6 8-12c0-4-4-8-8-8z"/>
+              <path d="M12 6v4M10 12h4"/>
+            </svg>
+          </div>
+          <div class="sensor-info">
+            <span class="sensor-label">Gas</span>
+            <span class="sensor-value" id="sensorGas">Normal</span>
+          </div>
+          <svg class="sensor-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+
+        <div class="sensor-card" id="sensor-seismic" onclick="showScreen('sensors')">
+          <div class="sensor-glow purple"></div>
+          <div class="sensor-icon seismic">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M2 12h2l2-4 3 8 2-6 2 4h2l2-3 2 2h3"/>
+            </svg>
+          </div>
+          <div class="sensor-info">
+            <span class="sensor-label">Red Sismica</span>
+            <span class="sensor-value" id="sensorSeismic">3 estaciones activas</span>
+          </div>
+          <svg class="sensor-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+      </div>
+
+      <!-- Acciones Rápidas -->
+      <div class="quick-actions">
+        <h3>Acciones rapidas</h3>
+        <div class="actions-row">
+          <button class="action-btn alarm" id="btnSOS" onclick="toggleAlarm()">
+            <div class="action-bg"></div>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 01-3.46 0"/>
+            </svg>
+            <span>SOS</span>
+          </button>
+          <button class="action-btn disarm" id="btnDisarm" onclick="toggleArm()">
+            <div class="action-bg"></div>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0110 0v4"/>
+            </svg>
+            <span id="armBtnText">Desarmar</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== ALERTAS ==================== -->
+    <section class="screen" id="screen-alerts">
+      <div class="screen-header">
+        <button class="back-btn" onclick="showScreen('dashboard')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <h2>Alertas</h2>
+        <button class="filter-btn" id="filterBtn" onclick="toggleAlertFilter()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="alert-filters" id="alertFilters">
+        <button class="filter-chip active" data-filter="all">Todas</button>
+        <button class="filter-chip" data-filter="gas">Gas</button>
+        <button class="filter-chip" data-filter="seguridad">Seguridad</button>
+        <button class="filter-chip" data-filter="sismo">Sismo</button>
+        <button class="filter-chip" data-filter="sistema">Sistema</button>
+      </div>
+
+      <div class="alerts-list" id="alertsList">
+        <div class="empty-state">
+          <div class="empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.2">
+              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 01-3.46 0"/>
+            </svg>
+          </div>
+          <p>No hay alertas recientes</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== SENSORES ==================== -->
+    <section class="screen" id="screen-sensors">
+      <div class="screen-header">
+        <button class="back-btn" onclick="showScreen('dashboard')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <h2>Sensores</h2>
+        <button class="refresh-btn" onclick="requestSensorUpdate()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="sensors-detail-list">
+        <div class="sensor-detail-card" id="detail-pir">
+          <div class="sensor-detail-icon blue">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="5" r="3"/>
+              <path d="M12 8v4l-3 4M12 12l3 4M8 20h8"/>
+            </svg>
+          </div>
+          <div class="sensor-detail-info">
+            <h4>Movimiento (PIR)</h4>
+            <p id="detailPirStatus">No detectado</p>
+          </div>
+          <div class="sensor-detail-status offline" id="detailPirBadge">
+            <span class="badge-dot"></span>
+          </div>
+        </div>
+
+        <div class="sensor-detail-card" id="detail-door">
+          <div class="sensor-detail-icon orange">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12h18M5 12V5a2 2 0 012-2h10a2 2 0 012 2v7M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/>
+              <circle cx="17" cy="12" r="1"/>
+            </svg>
+          </div>
+          <div class="sensor-detail-info">
+            <h4>Puerta Principal</h4>
+            <p id="detailDoorStatus">Cerrada</p>
+          </div>
+          <div class="sensor-detail-status offline" id="detailDoorBadge">
+            <span class="badge-dot"></span>
+          </div>
+        </div>
+
+        <div class="sensor-detail-card" id="detail-gas">
+          <div class="sensor-detail-icon red">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C8 2 4 6 4 10c0 6 8 12 8 12s8-6 8-12c0-4-4-8-8-8z"/>
+              <path d="M12 6v4M10 12h4"/>
+            </svg>
+          </div>
+          <div class="sensor-detail-info">
+            <h4>Sensor de Gas</h4>
+            <p id="detailGasStatus">Normal</p>
+          </div>
+          <div class="sensor-detail-status offline" id="detailGasBadge">
+            <span class="badge-dot"></span>
+          </div>
+        </div>
+
+        <div class="sensor-detail-card" id="detail-seismic">
+          <div class="sensor-detail-icon purple">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M2 12h2l2-4 3 8 2-6 2 4h2l2-3 2 2h3"/>
+            </svg>
+          </div>
+          <div class="sensor-detail-info">
+            <h4>Red Sismica</h4>
+            <p id="detailSeismicStatus">3 estaciones activas</p>
+          </div>
+          <div class="sensor-detail-status online" id="detailSeismicBadge">
+            <span class="badge-dot"></span>
+          </div>
+        </div>
+
+        <div class="sensor-detail-card" id="detail-system">
+          <div class="sensor-detail-icon green">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2L3 7v6c0 5.25 3.75 10.13 9 11.25C17.25 23.13 21 18.25 21 13V7l-9-5z"/>
+            </svg>
+          </div>
+          <div class="sensor-detail-info">
+            <h4>Estado del Sistema</h4>
+            <p id="detailSystemStatus">Normal</p>
+          </div>
+          <div class="sensor-detail-status online" id="detailSystemBadge">
+            <span class="badge-dot"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== CONTROL ==================== -->
+    <section class="screen" id="screen-control">
+      <div class="screen-header">
+        <button class="back-btn" onclick="showScreen('dashboard')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <h2>Control</h2>
+        <div></div>
+      </div>
+
+      <div class="control-section">
+        <h3 class="section-title">Dispositivos</h3>
+
+        <div class="control-item">
+          <div class="control-icon bell">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 01-3.46 0"/>
+            </svg>
+          </div>
+          <div class="control-info">
+            <h4>Sirena</h4>
+            <p id="sirenStatus">Alarma</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleAlarm" onchange="toggleAlarm()">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="control-item">
+          <div class="control-icon yellow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/>
+            </svg>
+          </div>
+          <div class="control-info">
+            <h4>Toma 1</h4>
+            <p id="toma1Status">Apagado</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleToma1" onchange="toggleOutput('toma1')">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="control-item">
+          <div class="control-icon yellow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/>
+            </svg>
+          </div>
+          <div class="control-info">
+            <h4>Toma 2</h4>
+            <p id="toma2Status">Apagado</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleToma2" onchange="toggleOutput('toma2')">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="control-item">
+          <div class="control-icon yellow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/>
+            </svg>
+          </div>
+          <div class="control-info">
+            <h4>Toma 3</h4>
+            <p id="toma3Status">Apagado</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleToma3" onchange="toggleOutput('toma3')">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="control-item">
+          <div class="control-icon cyan">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/>
+            </svg>
+          </div>
+          <div class="control-info">
+            <h4>Lampara</h4>
+            <p id="lampStatus">Apagado</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleLamp" onchange="toggleOutput('lampara')">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="control-section">
+        <h3 class="section-title">Seguridad</h3>
+
+        <div class="control-item">
+          <div class="control-icon blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </div>
+          <div class="control-info">
+            <h4>Ventilador Extractor</h4>
+            <p id="extractorStatus">Apagado</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleExtractor" onchange="toggleOutput('extractor')">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="control-item">
+          <div class="control-icon orange">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+          </div>
+          <div class="control-info">
+            <h4>Electrovalvula Gas</h4>
+            <p id="valvulaStatus">Cerrada</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleValvula" onchange="toggleOutput('valvula')">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="control-item">
+          <div class="control-icon green">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18.36 6.64a9 9 0 11-12.73 0M12 2v10"/>
+            </svg>
+          </div>
+          <div class="control-info">
+            <h4>Contactor (Luz)</h4>
+            <p id="contactorStatus">Encendido</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleContactor" onchange="toggleOutput('contactor')">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== HISTORIAL ==================== -->
+    <section class="screen" id="screen-history">
+      <div class="screen-header">
+        <button class="back-btn" onclick="showScreen('dashboard')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <h2>Historial</h2>
+        <div></div>
+      </div>
+
+      <div class="history-timeline" id="historyTimeline">
+        <div class="empty-state">
+          <div class="empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12,6 12,12 16,14"/>
+            </svg>
+          </div>
+          <p>Sin eventos registrados</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== AJUSTES ==================== -->
+    <section class="screen" id="screen-settings">
+      <div class="screen-header">
+        <button class="back-btn" onclick="showScreen('dashboard')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <h2>Ajustes</h2>
+        <div></div>
+      </div>
+
+      <div class="settings-list">
+        <div class="settings-group">
+          <h3>MQTT</h3>
+          <div class="setting-item">
+            <label>Broker</label>
+            <input type="text" id="settingBroker" value="broker.hivemq.com" class="setting-input">
+          </div>
+          <div class="setting-item">
+            <label>Puerto</label>
+            <input type="number" id="settingPort" value="8884" class="setting-input">
+          </div>
+          <div class="setting-item">
+            <label>Cliente ID</label>
+            <input type="text" id="settingClientId" value="AppSeguridad_JDSL" class="setting-input">
+          </div>
+          <div class="setting-item">
+            <label>Topic Prefijo</label>
+            <input type="text" id="settingPrefix" value="security" class="setting-input">
+          </div>
+          <button class="save-btn" onclick="saveSettings()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            Guardar y reconectar
+          </button>
+        </div>
+
+        <div class="settings-group">
+          <h3>Sistema</h3>
+          <div class="setting-item clickable" onclick="requestSensorUpdate()">
+            <span>Actualizar sensores</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+          </div>
+          <div class="setting-item clickable" onclick="clearHistory()">
+            <span>Limpiar historial</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3,6 5,6 21,6"/>
+              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>Acerca de</h3>
+          <div class="setting-item">
+            <span>Sistema de Seguridad IoT</span>
+            <span class="version">v1.0</span>
+          </div>
+          <div class="setting-item">
+            <span>Desarrollado por JDSL</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- NAVIGATION BAR -->
+  <nav class="bottom-nav">
+    <div class="nav-indicator" id="navIndicator"></div>
+    <button class="nav-btn active" data-screen="dashboard" onclick="showScreen('dashboard')">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+          <polyline points="9,22 9,12 15,12 15,22"/>
+        </svg>
+      </div>
+      <span>Inicio</span>
+    </button>
+    <button class="nav-btn" data-screen="sensors" onclick="showScreen('sensors')">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+      </div>
+      <span>Sensores</span>
+    </button>
+    <button class="nav-btn" data-screen="control" onclick="showScreen('control')">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+      </div>
+      <span>Control</span>
+    </button>
+    <button class="nav-btn" data-screen="alerts" onclick="showScreen('alerts')">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 01-3.46 0"/>
+        </svg>
+      </div>
+      <span>Alertas</span>
+    </button>
+    <button class="nav-btn" data-screen="history" onclick="showScreen('history')">
+      <div class="nav-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12,6 12,12 16,14"/>
+        </svg>
+      </div>
+      <span>Historial</span>
+    </button>
+  </nav>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast">
+    <span id="toastText"></span>
+  </div>
+
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Android Studio / Gradle
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+
+# No subir el APK compilado ni keystores
+*.apk
+*.keystore
+*.jks
+
+# Archivos de credenciales que no deben subirse
+**/secrets.properties
+**/*credentials*
