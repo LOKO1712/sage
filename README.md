@@ -57,6 +57,26 @@ El módulo fue validado con un **evento sísmico real el 24 de septiembre de 202
 
 Ver [`docs/CREDITOS.md`](docs/CREDITOS.md) para el detalle de cada proyecto de terceros utilizado.
 
+## 📸 Capturas
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/prototipo.jpg" width="380" alt="Prototipo físico"><br><sub><b>Prototipo físico</b><br>ESP32 con sensores y actuadores</sub></td>
+    <td align="center"><img src="assets/panel-armado.png" width="380" alt="App con sistema armado"><br><sub><b>App Android</b><br>Sistema armado, todo en orden</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/sismocap2.png" width="380" alt="Alerta sísmica Sismo Detector"><br><sub><b>Alerta sísmica real</b><br>Sismo Detector (fuente del puente): M5.1 a 31 km de Rioblanco, Tolima — 25 sep 2026, 2:20 a. m.</sub></td>
+    <td align="center"><img src="assets/monitoreo-sismico.png" width="380" alt="Sismograma en vivo"><br><sub><b>Sismograma en vivo</b><br>Estación S99D0 (RaspberryShake) en el panel de sensores</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/sismocap1.png" width="380" alt="Tolima"><br><sub><b>Tolima, Colombia</b><br>Región donde se sintió el sismo del 25 de septiembre</sub></td>
+    <td align="center"><img src="assets/onboarding-permisos.png" width="380" alt="Permiso de notificaciones"><br><sub><b>Onboarding</b><br>Solicitud del permiso de notificaciones</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="assets/onboarding-autoinicio.png" width="380" alt="Autoinicio"><br><sub><b>Onboarding</b><br>Asistente de autoinicio (Xiaomi/HyperOS) para mantener el monitoreo activo</sub></td>
+  </tr>
+</table>
+
 ## 📂 Estructura del repositorio
 
 ```
