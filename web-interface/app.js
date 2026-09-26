@@ -30,6 +30,11 @@ let alerts = [];
 let history = [];
 let currentAlertFilter = 'all';
 
+// ESP32 heartbeat tracking
+let lastEsp32Message = 0;
+let esp32Online = false;
+const ESP32_TIMEOUT = 10000; // 10 segundos sin mensajes = offline
+
 // ==================== CANVAS BACKGROUND ====================
 class ParticleBackground {
   constructor(canvas) {
@@ -50,15 +55,15 @@ class ParticleBackground {
   }
 
   init() {
-    const count = Math.min(35, Math.floor(window.innerWidth / 15));
+    const count = Math.min(50, Math.floor(window.innerWidth / 12));
     for (let i = 0; i < count; i++) {
       this.particles.push({
         x: Math.random() * this.canvas.width,
         y: Math.random() * this.canvas.height,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3,
-        size: Math.random() * 2 + 0.5,
-        opacity: Math.random() * 0.4 + 0.1,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        size: Math.random() * 3.5 + 1,
+        opacity: Math.random() * 0.7 + 0.2,
         color: this.getRandomColor()
       });
     }
@@ -98,12 +103,12 @@ class ParticleBackground {
         const dy = this.particles[i].y - this.particles[j].y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < 120) {
+        if (dist < 150) {
           this.ctx.beginPath();
           this.ctx.moveTo(this.particles[i].x, this.particles[i].y);
           this.ctx.lineTo(this.particles[j].x, this.particles[j].y);
-          this.ctx.strokeStyle = `rgba(0, 230, 118, ${0.06 * (1 - dist / 120)})`;
-          this.ctx.lineWidth = 0.5;
+          this.ctx.strokeStyle = `rgba(0, 230, 118, ${0.15 * (1 - dist / 150)})`;
+          this.ctx.lineWidth = 0.8;
           this.ctx.stroke();
         }
       }
@@ -144,6 +149,12 @@ function connectMQTT() {
 
   mqttClient.on('message', (topic, message) => {
     const msg = message.toString();
+
+    // Cualquier mensaje de sensores/status indica que el ESP32 está vivo
+    if (topic.includes('/sensors/') || topic.includes('/status/') || topic.endsWith('/state') || topic.endsWith('/armed')) {
+      lastEsp32Message = Date.now();
+      esp32Online = true;
+    }
 
     if (topic.endsWith('/state')) {
       systemState.state = msg;
@@ -212,6 +223,11 @@ function connectMQTT() {
   mqttClient.on('close', () => {
     isConnected = false;
     updateConnectionStatus(false);
+  });
+
+  mqttClient.on('reconnect', () => {
+    isConnected = true;
+    updateConnectionStatus(true);
   });
 }
 
@@ -302,7 +318,26 @@ function updateDashboard() {
   const title = document.getElementById('systemTitle');
   const subtitle = document.getElementById('systemSubtitle');
 
-  card.classList.remove('alarm', 'warning', 'seismic');
+  card.classList.remove('alarm', 'warning', 'seismic', 'disarmed');
+
+  const alertStates = ['GAS_DETECTED', 'INTRUSO_ALERTA', 'MANUAL_ALARM', 'SEISMIC_ALERT', 'TEST_AUDIO', 'TEST_ALARM'];
+  const isAlert = alertStates.includes(systemState.state);
+  const isDisarmed = !systemState.armed && !isAlert;
+
+  document.body.classList.toggle('alert-mode', isAlert);
+  document.body.classList.toggle('disarmed-mode', isDisarmed);
+
+  if (isDisarmed) card.classList.add('disarmed');
+
+  const shieldSvg = document.getElementById('shieldIcon').querySelector('svg');
+  const checkPath = shieldSvg.querySelector('#shieldCheck');
+  if (isDisarmed) {
+    checkPath.setAttribute('d', 'M18 6L6 18M6 6l12 12');
+    checkPath.style.animation = 'xAppear 0.6s ease-out';
+  } else {
+    checkPath.setAttribute('d', 'M9 12l2 2 4-4');
+    checkPath.style.animation = '';
+  }
 
   switch (systemState.state) {
     case 'NORMAL':
@@ -345,7 +380,7 @@ function updateDashboard() {
   document.getElementById('sensorPir').textContent = systemState.pir ? 'Detectado' : 'No detectado';
   document.getElementById('sensorDoor').textContent = systemState.door === 'open' ? 'Abierta' : 'Cerrada';
   document.getElementById('sensorGas').textContent = systemState.gas ? 'FUGA DETECTADA' : 'Normal';
-  document.getElementById('sensorSeismic').textContent = systemState.seismic ? 'ALERTA SISMICA' : '3 estaciones activas';
+  document.getElementById('sensorSeismic').textContent = systemState.seismic ? 'ALERTA SISMICA' : '4 fuentes activas';
 
   document.getElementById('sensor-movement').classList.toggle('alert', systemState.pir);
   document.getElementById('sensor-gas').classList.toggle('alert', systemState.gas);
@@ -359,7 +394,7 @@ function updateDashboard() {
   document.getElementById('detailPirStatus').textContent = systemState.pir ? 'Movimiento detectado' : 'No detectado';
   document.getElementById('detailDoorStatus').textContent = systemState.door === 'open' ? 'Abierta' : 'Cerrada';
   document.getElementById('detailGasStatus').textContent = systemState.gas ? 'FUGA DETECTADA' : 'Normal';
-  document.getElementById('detailSeismicStatus').textContent = systemState.seismic ? 'ALERTA SISMICA' : '3 estaciones activas';
+  document.getElementById('detailSeismicStatus').textContent = systemState.seismic ? 'ALERTA SISMICA' : 'GeoShake, Google, Sismo Detector, RaspberryShake';
   document.getElementById('detailSystemStatus').textContent = getStateLabel(systemState.state);
 
   document.getElementById('detailPirBadge').className = 'sensor-detail-status ' + (systemState.pir ? 'alert' : 'offline');
@@ -456,19 +491,23 @@ function renderAlerts() {
   }
 
   const iconMap = {
-    'GAS': '&#x1F525;',
-    'GAS_PERSISTENTE': '&#x26A0;&#xFE0F;',
-    'GAS_NORMAL': '&#x2705;',
-    'INTRUSO': '&#x1F6A8;',
-    'MOVIMIENTO': '&#x1F441;&#xFE0F;',
-    'PUERTA': '&#x1F6AA;',
-    'SISMO': '&#x1F30B;',
-    'SISMO_P': '&#x26A1;'
+    'GAS': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c-4.97 0-9-3.58-9-8 0-3.19 2.13-6.04 4-8.05C8.46 4.44 10.19 2 12 2c1.81 0 3.54 2.44 5 3.95 1.87 2.01 4 4.86 4 8.05 0 4.42-4.03 8-9 8z"/></svg>',
+    'GAS_PERSISTENTE': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>',
+    'GAS_NORMAL': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    'INTRUSO': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4" y1="4" x2="5.5" y2="5.5"/><line x1="18.5" y1="18.5" x2="20" y2="20"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg>',
+    'MOVIMIENTO': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 000 7M15.5 8.5a5 5 0 010 7"/><path d="M5.5 5.5a9 9 0 000 13M18.5 5.5a9 9 0 010 13"/></svg>',
+    'PUERTA': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 21V4a1 1 0 011-1h10a1 1 0 011 1v17"/><path d="M3 21h18"/><circle cx="14" cy="12" r="1.5"/></svg>',
+    'SISMO': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h2l2-4 3 8 2-6 2 4h2l2-3 2 2h3"/></svg>',
+    'SISMO_P': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+    'ALARMA': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>',
+    'SISTEMA': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>'
   };
+
+  const defaultIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>';
 
   list.innerHTML = filtered.map(a => `
     <div class="alert-item ${a.category}">
-      <div class="alert-icon">${iconMap[a.type] || '&#x1F514;'}</div>
+      <div class="alert-icon">${iconMap[a.type] || defaultIcon}</div>
       <div class="alert-content">
         <h4>${a.type.replace(/_/g, ' ')}</h4>
         <p>${a.message}</p>
@@ -572,6 +611,25 @@ function showToast(text) {
   setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
+let modalCallback = null;
+
+function showModal(title, message, onConfirm) {
+  modalCallback = onConfirm;
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalMessage').textContent = message;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+function hideModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+  modalCallback = null;
+}
+
+function confirmModal() {
+  if (modalCallback) modalCallback();
+  hideModal();
+}
+
 // ==================== SETTINGS ====================
 function saveSettings() {
   config.broker = document.getElementById('settingBroker').value;
@@ -608,6 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
   connectMQTT();
   updateDashboard();
   updateControlToggles();
+  updateEsp32Badge();
 
   setTimeout(() => moveNavIndicator(document.querySelector('.nav-btn.active')), 100);
 
@@ -620,3 +679,206 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+
+// ==================== CARD EXPANDIBLE ====================
+function toggleCardDetails(type) {
+  const card = document.getElementById('detail-' + type);
+  if (!card) return;
+
+  const wasOpen = card.classList.contains('open');
+
+  document.querySelectorAll('.sensor-detail-card.expandable').forEach(c => {
+    c.classList.remove('open');
+  });
+
+  if (!wasOpen) {
+    card.classList.add('open');
+    refreshCardDetails(type);
+  }
+}
+
+function refreshCardDetails(type) {
+  if (type === 'pir') updatePirDetails();
+  else if (type === 'door') updateDoorDetails();
+  else if (type === 'gas') updateGasDetails();
+  else if (type === 'seismic') updateSeismicDetails();
+  else if (type === 'system') updateSystemDetails();
+}
+
+// ==================== CONTADORES LOCALSTORAGE ====================
+function getTodayKey() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getCounter(name) {
+  const today = getTodayKey();
+  const data = JSON.parse(localStorage.getItem('counters_' + name) || '{}');
+  if (data.date !== today) return 0;
+  return data.count || 0;
+}
+
+function incrementCounter(name) {
+  const today = getTodayKey();
+  const data = JSON.parse(localStorage.getItem('counters_' + name) || '{}');
+  if (data.date !== today) {
+    localStorage.setItem('counters_' + name, JSON.stringify({ date: today, count: 1 }));
+  } else {
+    localStorage.setItem('counters_' + name, JSON.stringify({ date: today, count: (data.count || 0) + 1 }));
+  }
+}
+
+function getLastEvent(name) {
+  return localStorage.getItem('lastEvent_' + name) || 'Nunca';
+}
+
+function setLastEvent(name) {
+  const now = new Date();
+  const time = now.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+  const date = now.toLocaleDateString('es', { day: '2-digit', month: '2-digit' });
+  localStorage.setItem('lastEvent_' + name, date + ' ' + time);
+}
+
+function resetCounters() {
+  showModal(
+    '¿Reiniciar contadores?',
+    'Se borrarán aperturas, detecciones y alertas de gas.',
+    () => {
+      ['pir', 'door', 'gas', 'seismic'].forEach(name => {
+        localStorage.removeItem('counters_' + name);
+        localStorage.removeItem('lastEvent_' + name);
+      });
+
+      document.querySelectorAll('.sensor-detail-card.expandable.open').forEach(card => {
+        const type = card.id.replace('detail-', '');
+        refreshCardDetails(type);
+      });
+
+      showToast('Contadores reiniciados');
+    }
+  );
+}
+
+// ==================== ACTUALIZAR DETALLES ====================
+function updatePirDetails() {
+  document.getElementById('pirLastDetection').textContent = getLastEvent('pir');
+  document.getElementById('pirCountToday').textContent = getCounter('pir');
+  document.getElementById('pirCooldown').textContent = systemState.pir ? 'Activo' : 'Inactivo';
+}
+
+function updateDoorDetails() {
+  document.getElementById('doorLastOpen').textContent = getLastEvent('door');
+  document.getElementById('doorCountToday').textContent = getCounter('door');
+  document.getElementById('doorCurrentState').textContent = systemState.door === 'open' ? 'Abierta' : 'Cerrada';
+}
+
+function updateGasDetails() {
+  document.getElementById('gasLastAlert').textContent = getLastEvent('gas');
+  document.getElementById('gasCountToday').textContent = getCounter('gas');
+  document.getElementById('gasCurrentState').textContent = systemState.gas ? 'Fuga detectada' : 'Normal';
+}
+
+function updateSeismicDetails() {
+  document.getElementById('seismicLastEvent').textContent = getLastEvent('seismic');
+}
+
+function updateSystemDetails() {
+  const estados = {
+    'NORMAL': 'Normal',
+    'GAS_DETECTED': 'Alerta de Gas',
+    'MANUAL_ALARM': 'Alarma Manual',
+    'INTRUSO_ALERTA': 'Intruso',
+    'MOVIMIENTO_DETECTADO': 'Guardia',
+    'SEISMIC_ALERT': 'Alerta Sísmica',
+    'TEST_AUDIO': 'Prueba Audio',
+    'TEST_ALARM': 'Prueba Alarma'
+  };
+  document.getElementById('systemCurrentState').textContent = estados[systemState.state] || systemState.state;
+  document.getElementById('systemArmed').textContent = systemState.armed ? 'Sí' : 'No';
+  document.getElementById('systemMqtt').textContent = isConnected ? 'Conectado' : 'Desconectado';
+
+  const esp32El = document.getElementById('systemEsp32');
+  if (esp32El) {
+    esp32El.textContent = esp32Online ? 'En línea' : 'Desconectado';
+    esp32El.style.color = esp32Online ? 'var(--accent-green)' : 'var(--accent-red)';
+  }
+
+  // Actualizar badge en header
+  updateEsp32Badge();
+}
+
+function updateEsp32Badge() {
+  const badge = document.getElementById('esp32Badge');
+  const text = document.getElementById('esp32Text');
+  if (!badge || !text) return;
+
+  if (esp32Online) {
+    badge.classList.remove('offline');
+    badge.classList.add('online');
+    text.textContent = 'ESP32 En línea';
+  } else {
+    badge.classList.remove('online');
+    badge.classList.add('offline');
+    text.textContent = 'ESP32 Desconectado';
+  }
+}
+
+// ==================== RASTREO DE EVENTOS ====================
+let prevPir = false;
+let prevDoor = 'closed';
+let prevGas = false;
+
+// Verificar ESP32 online/offline cada 3 segundos
+setInterval(() => {
+  const wasOnline = esp32Online;
+  if (lastEsp32Message > 0) {
+    esp32Online = (Date.now() - lastEsp32Message) < ESP32_TIMEOUT;
+  }
+
+  // Siempre actualizar badge del header
+  updateEsp32Badge();
+
+  // Si cambió el estado, toast + actualizar card si está abierta
+  if (wasOnline !== esp32Online) {
+    const systemCard = document.getElementById('detail-system');
+    if (systemCard && systemCard.classList.contains('open')) {
+      updateSystemDetails();
+    }
+    showToast(esp32Online ? 'ESP32 en línea' : 'ESP32 desconectado');
+  }
+
+  // Actualizar card sistema si está abierta
+  const systemCard = document.getElementById('detail-system');
+  if (systemCard && systemCard.classList.contains('open')) {
+    updateSystemDetails();
+  }
+}, 3000);
+
+// Contadores de eventos
+setInterval(() => {
+  if (systemState.pir && !prevPir) {
+    incrementCounter('pir');
+    setLastEvent('pir');
+  }
+  prevPir = systemState.pir;
+
+  if (systemState.door === 'open' && prevDoor === 'closed') {
+    incrementCounter('door');
+    setLastEvent('door');
+  }
+  prevDoor = systemState.door;
+
+  if (systemState.gas && !prevGas) {
+    incrementCounter('gas');
+    setLastEvent('gas');
+  }
+  prevGas = systemState.gas;
+}, 1000);
+
+// Detectar alertas sísmicas del historial
+const origAddHistory = addHistoryItem;
+addHistoryItem = function(category, title, description) {
+  if (category === 'sismo' || (title && title.includes('SISMO'))) {
+    setLastEvent('seismic');
+  }
+  origAddHistory(category, title, description);
+};

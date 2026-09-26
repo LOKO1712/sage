@@ -17,21 +17,32 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.HogarSeguro">
+
+        <!-- SplashActivity ahora es la pantalla de arranque (launcher) -->
         <activity
-            android:name=".MainActivity"
+            android:name=".SplashActivity"
             android:exported="true"
-            android:theme="@style/Theme.HogarSeguro"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/Theme.HogarSeguro">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".OnboardingActivity"
+            android:exported="false"
+            android:theme="@style/Theme.HogarSeguro" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:theme="@style/Theme.HogarSeguro"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name=".sismico.SismoNotificationListener"
-            android:label="Puente Sismico Hogar Seguro"
+            android:label="Puente Sismico SAGE Home"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:foregroundServiceType="specialUse"
             android:exported="false">
@@ -39,6 +50,15 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- Servicio MQTT nativo: recibe security/alerts del broker y
+             muestra las notificaciones de gas/intruso/sismo aunque la
+             app (y la pagina web) esten cerradas. -->
+        <service
+            android:name=".AlertasMqttService"
+            android:label="Monitoreo de alertas"
+            android:foregroundServiceType="specialUse"
+            android:exported="false" />
 
     </application>
 

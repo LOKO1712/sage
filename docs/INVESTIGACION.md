@@ -85,10 +85,13 @@ resto del proyecto), con:
 - Un stream **SSE** anónimo (`/api/live`)
 - Firmware open-source (GPL-3.0) con un detector STA/LTA ya implementado
 
-Esto abre dos posibilidades a futuro: usar su feed de eventos como cuarta
-fuente redundante, o directamente construir un nodo GeoShake propio (mismo
-ESP32-S3, ~$15-30 USD en componentes) para tener detección local genuina —
-ver [`ROADMAP.md`](ROADMAP.md).
+Esto se convirtió en dos resultados prácticos:
+1. **Integrado:** su feed MQTT (`geoshake/events`) funciona hoy como **cuarta
+   fuente redundante** del sistema — validado en vivo con un evento sísmico
+   real el 24 de septiembre de 2026.
+2. **En el roadmap:** construir un nodo GeoShake propio (mismo ESP32-S3,
+   ~$15-30 USD en componentes) para tener detección local genuina —
+   ver [`ROADMAP.md`](ROADMAP.md).
 
 ## Conclusión
 

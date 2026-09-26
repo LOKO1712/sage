@@ -10,15 +10,18 @@
 - [x] Migración a `MqttAndroidClient` (asíncrono) + reconexión automática
 - [x] Flujo de onboarding: permisos de notificaciones, batería sin restricciones, autoinicio (Xiaomi/MIUI)
 - [x] Confirmación visual (Toast + notificación local) de cada alerta capturada
+- [x] Servicio nativo `AlertasMqttService` (Paho, MQTT TCP) que recibe `security/alerts` y muestra notificaciones nativas con la app en segundo plano — verificado en dispositivo real (sep 2026)
+- [x] GeoShake integrado como cuarta fuente (feed MQTT `geoshake/events`) — validado con un evento sísmico real el 24 sep 2026
+- [x] Estación RaspberryShake S99D0 embebida en el panel web (sismograma en vivo)
+- [x] Corrección del ciclo de alerta de gas: salir del estado ahora silencia el audio y publica `GAS_NORMAL`
 
 ## 🚧 En progreso / pendiente de validar
-- [ ] Confirmar que el Foreground Service se mantiene activo indefinidamente (notificación fija "Puente Sismico activo" no aparece aún — pendiente de diagnóstico, probablemente falta declarar `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` en el manifest para Android 14+)
+- [ ] Confirmar la notificación fija del puente `NotificationListener` en Android 14+ (`AlertasMqttService` ya genera la suya correctamente; quizá falte `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` en el manifest)
 - [ ] Confirmar comportamiento en HyperOS (no MIUI clásico) para el permiso de Autoinicio
 - [ ] Validar persistencia con pantalla apagada por periodos largos (30+ min)
 - [ ] Confirmar el paquete exacto de Android Earthquake Alerts (candidato actual: `com.google.android.apps.safetyhub`, sin confirmar con una alerta real)
 
 ## 📋 Por hacer
-- [ ] Integrar GeoShake como cuarta fuente (feed MQTT `geoshake/events` o SSE `/api/live`)
 - [ ] Evaluar construir un nodo GeoShake propio (ESP32-S3 + LSM6DSO) para detección local genuina
 - [ ] Completar el firmware del ESP32 (sensores + actuadores + cliente MQTT)
 - [ ] Migrar de broker público a broker privado con autenticación para producción

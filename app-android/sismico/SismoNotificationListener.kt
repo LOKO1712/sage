@@ -1,6 +1,5 @@
 package com.tuapp.hogarseguro.sismico
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
@@ -11,219 +10,197 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
-import org.eclipse.paho.android.service.MqttAndroidClient
-import org.eclipse.paho.client.mqttv3.DisconnectedBufferOptions
-import org.eclipse.paho.client.mqttv3.IMqttActionListener
-import org.eclipse.paho.client.mqttv3.IMqttToken
+import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
-import org.eclipse.paho.client.mqttv3.MqttException
 import org.eclipse.paho.client.mqttv3.MqttMessage
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.json.JSONObject
 import java.util.regex.Pattern
 
 /**
- * Escucha notificaciones de apps de alerta sismica (Sismo Detector, Google,
- * o cualquier otra que mencione un sismo) y republica cada alerta como un
- * mensaje MQTT hacia el broker publico de HiveMQ, para que el ESP32 y la
- * interfaz web las reciban.
+ * Escucha las notificaciones de apps de alerta sismica (Sismo Detector,
+ * GeoShake, y Google) y republica cada alerta como un mensaje MQTT hacia
+ * HiveMQ, para que el ESP32 y la interfaz web la reciban.
  *
- * VERSION 2 - usa MqttAndroidClient (asincrono) en vez de MqttClient
- * (bloqueante), y corre como Foreground Service - esto evita que Android
- * mate el servicio por ANR o por ahorro de bateria, que era la causa de
- * que dejara de funcionar despues de un rato.
+ * Esta es la version BASE CONFIRMADA FUNCIONANDO (cliente MQTT sincrono,
+ * sin Foreground Service) + el agregado de GeoShake, sin tocar nada mas
+ * de lo que ya funcionaba.
  *
  * IMPORTANTE - pasos manuales necesarios (no se pueden hacer por codigo):
- * 1. Activar el acceso a notificaciones para esta app en:
+ * 1. El usuario debe activar el acceso a notificaciones para esta app en:
  *    Ajustes -> Apps y notificaciones -> Acceso especial -> Acceso a notificaciones
  * 2. Declarar el servicio en AndroidManifest.xml (ver comentario al final).
- * 3. Dependencias de Eclipse Paho en build.gradle (ver comentario al final).
- * 4. Desactivar la optimizacion de bateria y activar Autoinicio (MIUI) -
- *    esto lo pide la propia app en MainActivity.kt, no hace falta hacerlo a mano.
+ * 3. Agregar la dependencia de Eclipse Paho MQTT en build.gradle (ver abajo).
  */
 class SismoNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "SismoListener"
         private const val PAQUETE_SISMO_DETECTOR = "com.finazzi.distquake"
-        private const val PAQUETE_GOOGLE_SAFETY = "com.google.android.apps.safetyhub"
+        private const val PAQUETE_GEOSHAKE = "com.geoshake"
+        // Confirmado por el usuario: el paquete real es Google Play Services,
+        // NO com.google.android.apps.safetyhub (paquete enorme y compartido,
+        // por eso exigimos SIEMPRE la palabra clave para este especifico)
+        private const val PAQUETE_GOOGLE_GMS = "com.google.android.gms"
         private const val CANAL_CONFIRMACION = "sismo_bridge_confirmacion"
-        private const val CANAL_SERVICIO = "sismo_bridge_servicio_activo"
-        private const val ID_NOTIFICACION_SERVICIO = 1001
 
-        private val PALABRAS_CLAVE_SISMO = listOf("sismo", "terremoto", "earthquake", "temblor")
+        // "sacudida" agregada tras confirmar que GeoShake usa esa palabra
+        // en vez de "sismo"/"terremoto"
+        private val PALABRAS_CLAVE_SISMO = listOf(
+            "sismo", "terremoto", "earthquake", "temblor", "sacudida"
+        )
 
+        // --- CONFIGURACION DEL BROKER (mismo que ya usa tu interfaz web) ---
         private const val HIVEMQ_HOST = "broker.hivemq.com"
         private const val HIVEMQ_PORT = 8883
 
+        // Mismo prefijo "security" que usa tu app.js (config.prefix)
         private const val PREFIJO = "security"
         private const val TOPIC_ALERTS = "$PREFIJO/alerts"
         private const val TOPIC_SEISMIC_SENSOR = "$PREFIJO/sensors/seismic"
 
-        private val PATRON_DISTANCIA = Pattern.compile("a\\s+(\\d+)\\s*km", Pattern.CASE_INSENSITIVE)
-        private val PATRON_MAGNITUD = Pattern.compile("M\\s*([\\d.]+)", Pattern.CASE_INSENSITIVE)
+        // Distancia: "a 150 km" (Sismo Detector) o variantes de Google:
+        // "epicentro a 290,2 km" / "a aproximadamente 141,3 km de distancia"
+        private val PATRON_DISTANCIA = Pattern.compile(
+            "(?:epicentro\\s+a|a)\\s+(?:aproximadamente\\s+)?([\\d]+[.,]?\\d*)\\s*km",
+            Pattern.CASE_INSENSITIVE
+        )
+        // Magnitud: "M4.5" (Sismo Detector) o variantes de Google:
+        // "Magnitud estimada de 6,4" / "Magnitud inicial estimada de 5,5"
+        private val PATRON_MAGNITUD = Pattern.compile(
+            "(?:M\\s*|Magnitud\\s+(?:inicial\\s+)?estimada\\s+de\\s*)([\\d]+[.,]?\\d*)",
+            Pattern.CASE_INSENSITIVE
+        )
+        // Formato GeoShake: "4 estaciones - sacudida moderada"
+        private val PATRON_ESTACIONES = Pattern.compile("(\\d+)\\s*estaciones?", Pattern.CASE_INSENSITIVE)
+        private val PATRON_SEVERIDAD = Pattern.compile("sacudida\\s+(\\w+)", Pattern.CASE_INSENSITIVE)
     }
 
-    private var mqttClient: MqttAndroidClient? = null
-    private var mqttConectado = false
+    private var mqttClient: MqttClient? = null
 
     override fun onCreate() {
         super.onCreate()
-        crearCanales()
-        volverseForeground()
+        crearCanalConfirmacion()
         conectarMqtt()
     }
 
-    private fun crearCanales() {
+    private fun crearCanalConfirmacion() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val canal = NotificationChannel(
+                CANAL_CONFIRMACION,
+                "Confirmacion de alertas sismicas",
+                NotificationManager.IMPORTANCE_HIGH
+            )
             val manager = getSystemService(NotificationManager::class.java)
-
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    CANAL_CONFIRMACION,
-                    "Confirmacion de alertas sismicas",
-                    NotificationManager.IMPORTANCE_HIGH
-                )
-            )
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    CANAL_SERVICIO,
-                    "Puente sismico en segundo plano",
-                    NotificationManager.IMPORTANCE_LOW // sin sonido, es solo para mantenerlo vivo
-                )
-            )
-        }
-    }
-
-    /** Convierte este servicio en Foreground Service - mucho mas dificil de matar. */
-    private fun volverseForeground() {
-        try {
-            val notif: Notification = NotificationCompat.Builder(this, CANAL_SERVICIO)
-                .setContentTitle("Puente Sismico activo")
-                .setContentText("Escuchando alertas de sismo en segundo plano")
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setOngoing(true)
-                .build()
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    ID_NOTIFICACION_SERVICIO,
-                    notif,
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                )
-            } else {
-                startForeground(ID_NOTIFICACION_SERVICIO, notif)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "No se pudo iniciar como foreground: ${e.message}")
+            manager.createNotificationChannel(canal)
         }
     }
 
     private fun conectarMqtt() {
         try {
             val clientId = "esp32-bridge-" + System.currentTimeMillis()
-            mqttClient = MqttAndroidClient(applicationContext, "ssl://$HIVEMQ_HOST:$HIVEMQ_PORT", clientId)
-
-            mqttClient?.setCallback(object : org.eclipse.paho.client.mqttv3.MqttCallbackExtended {
-                override fun connectComplete(reconnect: Boolean, serverURI: String?) {
-                    mqttConectado = true
-                    Log.i(TAG, if (reconnect) "Reconectado a HiveMQ" else "Conectado a HiveMQ")
-                }
-
-                override fun connectionLost(cause: Throwable?) {
-                    mqttConectado = false
-                    Log.w(TAG, "Conexion MQTT perdida: ${cause?.message}")
-                }
-
-                override fun messageArrived(topic: String?, message: MqttMessage?) {}
-                override fun deliveryComplete(token: org.eclipse.paho.client.mqttv3.IMqttDeliveryToken?) {}
-            })
-
+            mqttClient = MqttClient(
+                "ssl://$HIVEMQ_HOST:$HIVEMQ_PORT",
+                clientId,
+                MemoryPersistence()
+            )
             val options = MqttConnectOptions().apply {
                 isCleanSession = true
-                isAutomaticReconnect = true // clave: se reconecta solo si se cae la red
                 connectionTimeout = 10
             }
-
-            mqttClient?.connect(options, null, object : IMqttActionListener {
-                override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    mqttConectado = true
-                    Log.i(TAG, "Conexion inicial a HiveMQ exitosa")
-                    try {
-                        val bufferOptions = DisconnectedBufferOptions().apply {
-                            isBufferEnabled = true
-                            bufferSize = 20
-                            isPersistBuffer = false
-                            isDeleteOldestMessages = true
-                        }
-                        mqttClient?.setBufferOpts(bufferOptions)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "No se pudo configurar el buffer: ${e.message}")
-                    }
-                }
-
-                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    mqttConectado = false
-                    Log.e(TAG, "Fallo al conectar a HiveMQ: ${exception?.message}")
-                }
-            })
+            mqttClient?.connect(options)
+            Log.i(TAG, "Conectado a HiveMQ correctamente")
         } catch (e: Exception) {
-            Log.e(TAG, "Excepcion creando cliente MQTT: ${e.message}")
+            Log.e(TAG, "No se pudo conectar a HiveMQ: ${e.message}")
         }
     }
+
+    private var ultimoProcesadoMs = 0L
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        try {
-            procesarNotificacion(sbn)
-        } catch (e: Exception) {
-            // Blindaje: un fallo aca NUNCA debe tumbar el servicio completo
-            Log.e(TAG, "Error procesando notificacion: ${e.message}", e)
-        }
-    }
+        // FIX CRITICO: nunca procesar notificaciones de la propia app - si no,
+        // nuestras propias confirmaciones ("Capturada: ...sacudida...") se
+        // vuelven a capturar a si mismas y generan un bucle infinito.
+        if (sbn.packageName == packageName) return
 
-    private fun procesarNotificacion(sbn: StatusBarNotification) {
         val extras = sbn.notification.extras
         val titulo = extras.getCharSequence("android.title")?.toString() ?: ""
         val texto = extras.getCharSequence("android.text")?.toString() ?: ""
 
-        val esFuenteConocida = sbn.packageName == PAQUETE_SISMO_DETECTOR ||
-                sbn.packageName == PAQUETE_GOOGLE_SAFETY
+        val esSismoDetector = sbn.packageName == PAQUETE_SISMO_DETECTOR
+        val esGeoShake = sbn.packageName == PAQUETE_GEOSHAKE
+        val esGoogleGms = sbn.packageName == PAQUETE_GOOGLE_GMS
         val contienePalabraClave = PALABRAS_CLAVE_SISMO.any {
             titulo.contains(it, ignoreCase = true) || texto.contains(it, ignoreCase = true)
         }
 
-        if (!esFuenteConocida && !contienePalabraClave) return
+        // Filtro cerrado: SOLO estas 3 apps, ya no cualquier app con palabra
+        // clave (eso era util para investigar cuando no sabiamos los paquetes
+        // exactos, pero ahora es mas riesgo que ayuda - cualquier chat/noticia
+        // que mencione "sismo" generaria una alerta falsa).
+        // Sismo Detector: esa app SOLO manda cosas de sismos, confiamos en el
+        // paquete solo. GeoShake y Google tambien mandan notificaciones que
+        // NO son alertas (estado de conexion, servicio, etc.) - para esas DOS
+        // exigimos la palabra clave siempre, sin excepcion.
+        val debeProcesar = esSismoDetector ||
+                (esGeoShake && contienePalabraClave) ||
+                (esGoogleGms && contienePalabraClave)
 
-        if (!esFuenteConocida && contienePalabraClave) {
-            Log.w(TAG, "PAQUETE NUEVO con palabra clave sismica: ${sbn.packageName}")
-            mostrarConfirmacionVisual("Paquete detectado: ${sbn.packageName}\n$titulo")
+        if (!debeProcesar) return
+
+        // Segunda red de seguridad: nunca procesar mas de 1 notificacion cada
+        // 1 segundo, pase lo que pase. Si algo genera una tormenta de
+        // notificaciones por cualquier motivo futuro, esto la corta de raiz.
+        val ahora = System.currentTimeMillis()
+        if (ahora - ultimoProcesadoMs < 1000) {
+            Log.w(TAG, "Notificacion ignorada por debounce (demasiado seguida): ${sbn.packageName}")
+            return
         }
+        ultimoProcesadoMs = ahora
 
         Log.i(TAG, "Notificacion capturada [${sbn.packageName}] -> Titulo: $titulo | Texto: $texto")
         mostrarConfirmacionVisual("Capturada: $titulo")
 
-        val esPrueba = titulo.contains("Test", ignoreCase = true)
+        val esPrueba = titulo.contains("Test", ignoreCase = true) ||
+                titulo.contains("Prueba", ignoreCase = true)
+
         val distanciaKm = extraerNumero(PATRON_DISTANCIA, "$titulo $texto")
         val magnitud = extraerNumero(PATRON_MAGNITUD, "$titulo $texto")
+        val estaciones = if (esGeoShake) extraerNumero(PATRON_ESTACIONES, texto)?.toInt() else null
+        val severidad = if (esGeoShake) {
+            // Busca SOLO en el cuerpo (texto) - el titulo siempre dice
+            // "sacudida detectada" y contaminaba la severidad real
+            val m = PATRON_SEVERIDAD.matcher(texto)
+            if (m.find()) m.group(1) else null
+        } else null
 
         val nombreFuente = when (sbn.packageName) {
             PAQUETE_SISMO_DETECTOR -> "Sismo Detector"
-            PAQUETE_GOOGLE_SAFETY -> "Google"
+            PAQUETE_GEOSHAKE -> "GeoShake"
+            PAQUETE_GOOGLE_GMS -> "Google"
             else -> "App desconocida (${sbn.packageName})"
         }
 
+        // Arma el mensaje legible que vera el usuario en la lista de alertas
         val mensaje = buildString {
-            append("$nombreFuente: $titulo")
-            if (distanciaKm != null) append(" - a ${distanciaKm.toInt()} km")
+            append("$nombreFuente: ")
+            if (distanciaKm != null) append("a ${distanciaKm.toInt()} km")
             if (magnitud != null) append(" - M${magnitud}")
+            if (estaciones != null) append(" - $estaciones estaciones")
+            if (severidad != null) append(" ($severidad)")
             if (esPrueba) append(" (PRUEBA)")
         }
 
-        val tipoAlerta = if (sbn.packageName == PAQUETE_GOOGLE_SAFETY) "SISMO" else "SISMO_P"
+        // "SISMO_P" = alerta temprana (deteccion crowdsourced, antes de sentirse)
+        // "SISMO"   = confirmacion mas fuerte (Google solo avisa cuando ya es real/inminente)
+        val tipoAlerta = if (esGoogleGms) "SISMO" else "SISMO_P"
 
         val payloadAlerta = JSONObject().apply {
             put("type", tipoAlerta)
             put("message", mensaje)
             put("fuente", sbn.packageName)
+            if (estaciones != null) put("estaciones", estaciones)
+            if (severidad != null) put("severidad", severidad)
         }
 
         val publicoOk = publicarMqtt(TOPIC_ALERTS, payloadAlerta.toString())
@@ -236,63 +213,55 @@ class SismoNotificationListener : NotificationListenerService() {
         }
     }
 
+    /**
+     * Confirmacion visual doble: un Toast (rapido, solo si la pantalla esta
+     * encendida en ese momento) y una notificacion local que se queda en la
+     * barra (para verla despues, aunque no hayas visto el Toast a tiempo).
+     */
+    private fun mostrarConfirmacionVisual(texto: String) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(applicationContext, texto, Toast.LENGTH_LONG).show()
+        }
+
+        val notif = NotificationCompat.Builder(this, CANAL_CONFIRMACION)
+            .setContentTitle("Puente Sismico")
+            .setContentText(texto)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(System.currentTimeMillis().toInt(), notif)
+    }
+
     private fun extraerNumero(patron: Pattern, texto: String): Double? {
         val matcher = patron.matcher(texto)
-        return if (matcher.find()) matcher.group(1)?.toDoubleOrNull() else null
+        return if (matcher.find()) {
+            // Google usa coma decimal ("6,4"), Sismo Detector usa punto - normalizamos
+            matcher.group(1)?.replace(",", ".")?.toDoubleOrNull()
+        } else null
     }
 
     private fun publicarMqtt(topic: String, payload: String): Boolean {
         return try {
-            val cliente = mqttClient ?: return false
+            if (mqttClient?.isConnected != true) {
+                conectarMqtt()
+            }
             val mensaje = MqttMessage(payload.toByteArray())
             mensaje.qos = 1
-            // Con isAutomaticReconnect + buffer, publish funciona incluso si
-            // en este instante esta reconectando - Paho encola el mensaje.
-            cliente.publish(topic, mensaje)
+            mqttClient?.publish(topic, mensaje)
             Log.i(TAG, "Publicado en $topic: $payload")
             true
-        } catch (e: MqttException) {
+        } catch (e: Exception) {
             Log.e(TAG, "Error publicando en MQTT: ${e.message}")
             false
-        } catch (e: Exception) {
-            Log.e(TAG, "Error inesperado publicando: ${e.message}")
-            false
-        }
-    }
-
-    private fun mostrarConfirmacionVisual(texto: String) {
-        try {
-            Handler(Looper.getMainLooper()).post {
-                Toast.makeText(applicationContext, texto, Toast.LENGTH_LONG).show()
-            }
-
-            val notif = NotificationCompat.Builder(this, CANAL_CONFIRMACION)
-                .setContentTitle("Puente Sismico")
-                .setContentText(texto)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .build()
-
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.notify(System.currentTimeMillis().toInt(), notif)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error mostrando confirmacion visual: ${e.message}")
         }
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
         Log.i(TAG, "Listener de notificaciones conectado")
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        try {
-            mqttClient?.disconnect()
-        } catch (e: Exception) {
-            // ignorar
-        }
     }
 }
 
@@ -305,19 +274,14 @@ PASO 1: AndroidManifest.xml - agrega dentro de <application>:
     android:name=".sismico.SismoNotificationListener"
     android:label="Puente Sismico Hogar Seguro"
     android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-    android:foregroundServiceType="specialUse"
     android:exported="false">
     <intent-filter>
         <action android:name="android.service.notification.NotificationListenerService" />
     </intent-filter>
 </service>
 
-Y estos permisos (fuera de <application>):
+Tambien agrega este permiso de internet (fuera de <application>):
 <uses-permission android:name="android.permission.INTERNET" />
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
 =====================================================================
 PASO 2: build.gradle.kts (Module: app) - agrega dentro de dependencies { }:
@@ -326,12 +290,17 @@ PASO 2: build.gradle.kts (Module: app) - agrega dentro de dependencies { }:
 implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
 implementation("org.eclipse.paho:org.eclipse.paho.android.service:1.1.1")
 
-Y en settings.gradle.kts, dentro de dependencyResolutionManagement -> repositories:
+Y en el archivo settings.gradle.kts (a nivel de PROYECTO), busca el bloque
+dependencyResolutionManagement { repositories { ... } } y agrega ahi dentro:
 maven { url = uri("https://repo.eclipse.org/content/repositories/paho-releases/") }
 
 =====================================================================
-PASO 3: El permiso de notificaciones NO se pide con dialogo normal:
+PASO 3: Pedir el permiso al usuario (desde tu Activity principal)
 =====================================================================
+
+Este permiso NO se puede pedir con un dialogo normal, hay que llevar
+al usuario directamente a los ajustes del sistema:
+
     startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
 =====================================================================
 */

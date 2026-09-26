@@ -18,8 +18,12 @@ explícitamente ese trabajo.
 
 - **[GeoShake](https://geoshake.org)** — Red sísmica ciudadana de hardware
   abierto (ESP32-S3 + acelerómetros LSM6DSO), con servidor SeedLink
-  público, API REST/MQTT/SSE, y firmware open-source (GPL-3.0). Referencia
-  directa para el diseño de un futuro nodo sensor propio.
+  público, API REST/MQTT/SSE, y firmware open-source (GPL-3.0). Su feed
+  MQTT está integrado como cuarta fuente redundante del sistema.
+
+- **[RaspberryShake](https://raspberryshake.net)** — Su estación en línea
+  **S99D0** se embebe en el panel web (sismograma en vivo) como fuente de
+  visualización complementaria.
 
 - **[EMSC - SeismicPortal](https://www.seismicportal.eu)** — Centro
   Sismológico Euro-Mediterráneo, por su WebSocket público de notificación
@@ -40,7 +44,9 @@ descartaron por no ser viables para este caso de uso — las siguientes
 redes e instituciones, cuyo trabajo es igualmente valioso para la
 sismología global:
 
-- Raspberry Shake / Raspberry Shake Data
+- Raspberry Shake (como fuente de datos crudos en tiempo real — descartada
+  para alerta; su estación en línea S99D0 sí se usa para visualización,
+  ver arriba)
 - EarthScope (antes IRIS)
 - GEOFON / GFZ Potsdam
 - Servicio Geológico Colombiano (SGC)
