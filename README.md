@@ -8,7 +8,6 @@ Plataforma de seguridad inteligente para el hogar, basada en **ESP32**, con moni
 
 **Autor:** Juan Diego Silva
 **Estado:** 🚧 En desarrollo activo
-**Evento:** Proyecto de aula presentado en **BARBOUIS Innova 2026** — UIS Sede Barbosa · **ODS 11**
 
 > Este proyecto se conoció durante sus primeras etapas de desarrollo como
 > "Hogar Seguro" — el nombre evolucionó a **SAGE** pensando en su
@@ -26,16 +25,6 @@ SAGE nace como proyecto personal luego de avances con TelegramBotMaster para ESP
 - **Interfaz web** — panel de control visual, empaquetado también dentro de la app
 
 Uno de los retos más interesantes del proyecto fue diseñar la **alerta temprana de sismos**: ver [`docs/INVESTIGACION.md`](docs/INVESTIGACION.md) para el proceso completo de investigación de fuentes de datos sísmicos en tiempo real (spoiler: la mayoría de fuentes "públicas" resultaron no ser viables, y la solución final combina varias fuentes crowdsourced de forma redundante).
-
-## 🖼️ Póster académico
-
-<p align="center">
-  <img src="assets/poster-barbouis.jpg" alt="Póster BARBOUIS Innova 2026 — SAGE" width="420">
-</p>
-
-<p align="center">
-  <sub>Póster presentado en BARBOUIS Innova 2026 (UIS Sede Barbosa). Versión completa en alta resolución disponible bajo solicitud.</sub>
-</p>
 
 ## 🏗️ Arquitectura
 
